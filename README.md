@@ -29,7 +29,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Run Prepare Action
-        uses: buildsafedev/multiarch-build--action/prepare-action
+        uses: buildsafedev/multiarch-build--action/prepare-action@main
         with:
           oci_registry_username: ${{ secrets.DOCKERHUB_USERNAME }}
           oci_registry_password: ${{ secrets.DOCKERHUB_PASSWORD }}
@@ -49,7 +49,7 @@ jobs:
         uses: actions/checkout@v4
       
       - name: Run Build Action
-        uses: buildsafedev/multiarch-build--action/actions/build-action
+        uses: buildsafedev/multiarch-build--action/build-action@main
         with:
           oci_registry_username: ${{ secrets.DOCKERHUB_USERNAME }}
           oci_registry_password: ${{ secrets.DOCKERHUB_PASSWORD }}
@@ -63,7 +63,7 @@ jobs:
         uses: actions/checkout@v4
       
       - name: Run Merge Action
-        uses: buildsafedev/multiarch-build--action/actions/merge-action
+        uses: buildsafedev/multiarch-build--action/merge-action@main
         with:
           oci_registry_username: ${{ secrets.DOCKERHUB_USERNAME }}
           oci_registry_password: ${{ secrets.DOCKERHUB_PASSWORD }}
