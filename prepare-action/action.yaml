@@ -1,0 +1,47 @@
+name: 'Prepare Build'
+description: 'Prepare the build environment and create a matrix for platforms.'
+
+inputs:
+  oci_registry_username:
+    description: 'DockerHub username'
+    required: true
+  dockerhub_password:
+    description: 'DockerHub password'
+    required: true
+  image_name:
+    description: 'Name of the Docker image'
+    required: true
+  tag:
+    description: 'Tag of the Docker image'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Create matrix
+      shell: bash
+      id: platforms
+      run: |
+        echo 'matrix=["linux/amd64", "linux/arm64"]' >> $GITHUB_OUTPUT
+
+    - name: Docker meta
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ inputs.image_name }}/${{ inputs.tag }}
+
+    - name: Rename meta bake definition file
+      shell: bash
+      run: |
+        mv "${{ steps.meta.outputs.bake-file }}" "/tmp/bake-meta.json"
+
+    - name: Upload meta bake definition
+      uses: actions/upload-artifact@v4
+      with:
+        name: bake-meta
+        path: /tmp/bake-meta.json
+        if-no-files-found: error
+        retention-days: 1
