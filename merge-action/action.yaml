@@ -62,7 +62,7 @@ runs:
     - name: Inspect image
       shell: bash
       run: |
-        docker buildx imagetools inspect ${{ inputs.image_name }}:$(jq -r '.target."docker-metadata-action".args.DOCKER_META_VERSION' /tmp/bake-meta.json)
+        docker buildx imagetools inspect ${{ inputs.image_name }}:${{ inputs.tag }}
 
     - name: Print Digest for Verification
       shell: bash
