@@ -8,6 +8,9 @@ inputs:
   oci_registry_password:
     description: 'DockerHub password'
     required: true
+  ociBlocks:
+    description: 'OCI blocks to build example: dev, runtime'
+    required: true
   directory:
     description: 'The directory to operate in. Defaults to root of the repository.'
     required: false
@@ -43,13 +46,17 @@ runs:
     - name: Install bsf
       shell: bash
       run: |
-        nix profile install github:buildsafedev/bsf
+        nix profile install github:buildsafedev/bsf?dir=bsf
 
     - name: Build and push image with digest
       shell: bash
       working-directory: ${{ inputs.directory }}
       run: |
-        bsf oci pkgs --push --digest --dest-creds=${{ inputs.oci_registry_username }}:${{ inputs.oci_registry_password }}
+        ociBlocks=(${{ inputs.ociBlocks }})
+        for ociBlock in "${ociBlocks[@]}"; do
+          echo "Building and pushing image for $ociBlock"
+          bsf oci $ociBlock --push --digest --dest-creds=${{ inputs.oci_registry_username }}:${{ inputs.oci_registry_password }}
+        done
 
     - name: Read digest from bsf result
       working-directory: ${{ inputs.directory }}
