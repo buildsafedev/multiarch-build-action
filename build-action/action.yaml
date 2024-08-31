@@ -56,29 +56,18 @@ runs:
         for ociBlock in "${ociBlocks[@]}"; do
           echo "Building and pushing image for $ociBlock"
           bsf oci $ociBlock --push --digest --dest-creds=${{ inputs.oci_registry_username }}:${{ inputs.oci_registry_password }}
+          digest=$(cat bsf-result/digest)
+          echo "digest=$digest" >> $GITHUB_OUTPUT
+
+          mkdir -p /tmp/digests/${ociBlock}
+          touch "/tmp/digests/${ociBlock}/${digest#sha256:}"
         done
-
-    - name: Read digest from bsf result
-      working-directory: ${{ inputs.directory }}
-      shell: bash
-      id: get_digest
-      run: |
-        digest=$(cat bsf-result/digest)
-        echo "digest=$digest" >> $GITHUB_OUTPUT
-
-    - name: Export digest
-      shell: bash
-      run: |
-        mkdir -p /tmp/digests
-        digest="${{ steps.get_digest.outputs.digest }}"
-        echo "Digest: $digest"
-        touch "/tmp/digests/${digest#sha256:}"
 
     - name: Verify digest files
       shell: bash
       run: |
         echo "Digest files created:"
-        ls -l /tmp/digests/
+        ls -l /tmp/digests
 
     - name: Upload digest
       uses: actions/upload-artifact@v4

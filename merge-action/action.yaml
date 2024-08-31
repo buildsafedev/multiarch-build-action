@@ -11,6 +11,9 @@ inputs:
   image_name:
     description: 'Name of the Docker image'
     required: true
+  ociBlock:
+    description: 'OCI block to build example: dev it takes only one block at a time'
+    required: true
   tag:
     description: 'Tag of the Docker image'
     required: true
@@ -48,7 +51,7 @@ runs:
 
     - name: Create manifest list and push
       shell: bash
-      working-directory: /tmp/digests
+      working-directory: /tmp/digests/${{ inputs.ociBlock }}
       run: |
         tags=$(jq -cr '.target."docker-metadata-action".tags | map("-t " + "${{ inputs.image_name }}:${{ inputs.tag }}") | join(" ")' /tmp/bake-meta.json)
         
@@ -57,7 +60,7 @@ runs:
           exit 1
         fi
 
-        docker buildx imagetools create $tags $(printf '${{ inputs.image_name }}@sha256:%s ' *)
+        docker buildx imagetools create $tags $(printf '${{ inputs.image_name }}@sha256:%s ' *) 
 
     - name: Inspect image
       shell: bash
@@ -67,7 +70,7 @@ runs:
     - name: Print Digest for Verification
       shell: bash
       run: |
-        for file in /tmp/digests/*; do
+        for file in /tmp/digests/${{ inputs.ociBlock }}/*; do
           echo "Digest: $(basename $file)"
         done
 
