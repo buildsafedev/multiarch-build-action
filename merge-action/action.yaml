@@ -3,10 +3,10 @@ description: 'Merge digests and push Docker manifest.'
 
 inputs:
   oci_registry_username:
-    description: 'DockerHub username'
+    description: 'oci registry username'
     required: true
   oci_registry_password:
-    description: 'DockerHub password'
+    description: 'oci registry password'
     required: true
   image_name:
     description: 'Name of the Docker image'
@@ -24,7 +24,7 @@ runs:
     - name: Download meta bake definition
       uses: actions/download-artifact@v4
       with:
-        name: bake-meta
+        name: bake-meta-${{ inputs.ociBlock }}
         path: /tmp
 
     - name: Download digests
@@ -53,7 +53,9 @@ runs:
       shell: bash
       working-directory: /tmp/digests/${{ inputs.ociBlock }}
       run: |
-        tags=$(jq -cr '.target."docker-metadata-action".tags | map("-t " + "${{ inputs.image_name }}:${{ inputs.tag }}") | join(" ")' /tmp/bake-meta.json)
+        image_name="${{ inputs.image_name }}"
+        image_name="${image_name##*/}"
+        tags=$(jq -cr '.target."docker-metadata-action".tags | map("-t " + "${{ inputs.image_name }}:${{ inputs.tag }}") | join(" ")' /tmp/${image_name}-bake-meta.json)
         
         if [[ -z "$tags" ]]; then
           echo "ERROR: No tags were generated."

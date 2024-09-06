@@ -3,13 +3,16 @@ description: 'Prepare the build environment and create a matrix for platforms.'
 
 inputs:
   oci_registry_username:
-    description: 'DockerHub username'
+    description: 'oci registry username'
     required: true
-  dockerhub_password:
-    description: 'DockerHub password'
+  oci_registry_password:
+    description: 'oci registry password'
     required: true
   image_name:
     description: 'Name of the Docker image'
+    required: true
+  ociBlock:
+    description: 'OCI block to build example: dev it takes only one block at a time'
     required: true
   tag:
     description: 'Tag of the Docker image'
@@ -36,12 +39,15 @@ runs:
     - name: Rename meta bake definition file
       shell: bash
       run: |
-        mv "${{ steps.meta.outputs.bake-file }}" "/tmp/bake-meta.json"
+        mkdir /tmp/meta-bake-defination
+        image_name="${{ inputs.image_name }}"
+        image_name="${image_name##*/}"
+        mv "${{ steps.meta.outputs.bake-file }}" "/tmp/meta-bake-defination/${image_name}-bake-meta.json"
 
     - name: Upload meta bake definition
       uses: actions/upload-artifact@v4
       with:
-        name: bake-meta
-        path: /tmp/bake-meta.json
+        name: bake-meta-${{ inputs.ociblock }}
+        path: /tmp/meta-bake-defination/
         if-no-files-found: error
         retention-days: 1

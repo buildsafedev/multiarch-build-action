@@ -35,6 +35,7 @@ jobs:
           oci_registry_username: ${{ secrets.DOCKERHUB_USERNAME }}
           oci_registry_password: ${{ secrets.DOCKERHUB_PASSWORD }}
           image_name: holiodin01/testbaseimg
+          ociBlock: rust-dev
           tag: ${{ github.ref }}
 
   build:
