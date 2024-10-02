@@ -1,33 +1,34 @@
 name : Hermetic Builds
-description : `Hermetic Builds builds and pushes Docker images with a hermetic build process.`
+description : 'Hermetic Builds builds and pushes Docker images with a hermetic build process.'
 inputs :
   oci_registry_username :
-    description : `oci registry username`
-    required : `true`
+    description : 'oci registry username'
+    required : 'true'
   oci_registry_password :
-    description : `oci registry password`
-    required : `true`
+    description : 'oci registry password'
+    required : 'true'
   image_name :
-    description : `Name of the Docker image`
-    required : `true`
+    description : 'Name of the Docker image'
+    required : 'true'
   tag :
-    description : `Tag of the Docker image`
-    required : `true`
+    description : 'Tag of the Docker image'
+    required : 'true'
   directory :
-    description : `Directory where the Dockerfile is located`
-    required : `true`
+    description : 'Directory where the Dockerfile is located'
+    required : 'true'
   platform :
-    description : `Platform to build the Docker image for`
-    required : `true`
+    description : 'Platform to build the Docker image for'
+    required : 'true'
   base_image :
-    description : `Base image for the Docker image`
-    required : `true`
+    description : 'Base image for the Docker image'
+    required : 'true'
   runtime_image :
-    description : `Runtime image for the Docker image`
-    required : `true`
+    description : 'Runtime image for the Docker image'
+    required : 'true'
 
 jobs:
   build-hermetic:
+    working-directory: ${{ inputs.directory }}
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
@@ -95,7 +96,8 @@ jobs:
 
     - name: Install Nix
       uses: DeterminateSystems/nix-installer-action@main
-
-    - name: scan for vulnerabilities
-      run: |
-        nix run nixpkgs#grype ${{ inputs.image_name }}:${{ inputs.tag }}
+    - uses: DeterminateSystems/magic-nix-cache-action@main
+    - uses: nicknovitski/nix-develop@v1
+      with:
+        arguments: bsf/.#devShell
+    - run: grype ${{ inputs.image_name }}:${{ inputs.tag }}
