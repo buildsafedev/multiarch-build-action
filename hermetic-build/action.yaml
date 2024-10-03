@@ -1,0 +1,123 @@
+name: Hermetic Builds
+description: 'Hermetic Builds builds and pushes Docker images with a hermetic build process.'
+inputs:
+  oci_registry_username:
+    description: 'OCI registry username'
+    required: true
+  oci_registry_password:
+    description: 'OCI registry password'
+    required: true
+  image_name:
+    description: 'Name of the Docker image'
+    required: true
+  tag:
+    description: 'Tag of the Docker image'
+    required: true
+  directory:
+    description: 'Directory where the Dockerfile is located'
+    required: true
+  platform:
+    description: 'Platform to build the Docker image for'
+    required: true
+  base_image:
+    description: 'Base image for the Docker image'
+    required: true
+  runtime_image:
+    description: 'Runtime image for the Docker image'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to OCI Registry
+      uses: docker/login-action@v3
+      with:
+        username: ${{ inputs.oci_registry_username }}
+        password: ${{ inputs.oci_registry_password }}
+
+    - name: Set latest docker image
+      shell: bash
+      run: |
+        sed -i "s|FROM .* AS build|FROM ${{ inputs.base_image }} AS build|g" ${{ inputs.directory }}/Dockerfile
+        sed -i "s|FROM .* AS final|FROM ${{ inputs.runtime_image }} AS final|g" ${{ inputs.directory }}/Dockerfile
+
+    - name: Set SOURCE_DATE_EPOCH
+      shell: bash
+      run: |
+        echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> $GITHUB_ENV
+
+    - name: Build hermetic Docker image
+      shell: bash
+      working-directory: ${{ inputs.directory }}
+      run: |
+        set -euo pipefail
+        
+        echo "SOURCE_DATE_EPOCH: $SOURCE_DATE_EPOCH"
+        
+        # Build the main image
+        docker buildx build \
+          --no-cache \
+          --output type=docker \
+          --tag ${{ inputs.image_name }}:${{ inputs.tag }} \
+          --build-arg SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH \
+          --network=none \
+          --platform=${{ inputs.platform }} \
+          .
+        
+        echo "Build completed successfully"
+
+    - name: Verify hermetic build
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        # Check image history for network access or RUN commands
+        if docker history ${{ inputs.image_name }}:${{ inputs.tag }} | grep -qE 'RUN|curl|wget|apt-get|yum|dnf'; then
+          echo "Image history contains RUN commands or network access indicators, which may indicate non-hermetic build."
+          exit 1
+        fi
+        
+        # Check if build args include SOURCE_DATE_EPOCH
+        if ! docker inspect ${{ inputs.image_name }}:${{ inputs.tag }} --format '{{index .Config.Labels "org.opencontainers.image.created"}}' | grep -q "$SOURCE_DATE_EPOCH"; then
+          echo "Build does not appear to use SOURCE_DATE_EPOCH as creation timestamp."
+          exit 1
+        fi
+        
+        # Verify SLSA metadata
+        metadata=$(docker buildx imagetools inspect ${{ inputs.image_name }}:${{ inputs.tag }} --format '{{json .Metadata}}')
+        if echo "$metadata" | jq -e '."https://mobyproject.org/buildkit@v1#hermetic" == true' > /dev/null; then
+          echo "SLSA metadata confirms the build was hermetic."
+        else
+          echo "SLSA metadata does not indicate a hermetic build."
+          exit 1
+        fi
+        
+        echo "Build is verified as hermetic based on image history, build arguments, and SLSA metadata."
+        echo "Note: The hermetic flag is included with both mode=min and mode=max in the SLSA metadata."
+        echo "This extension field is set to true if the build was hermetic and did not access the network."
+        echo "In Dockerfiles, a build is hermetic if it does not use RUN commands or disables network with --network=none flag."
+
+      
+    - name: Install Nix
+      uses: DeterminateSystems/nix-installer-action@main
+
+    - name: Check Nixpkgs inputs
+      uses: DeterminateSystems/flake-checker-action@main
+      with:
+        fail-mode: true
+        flake-lock-path: ${{ inputs.directory }}/bsf/flake.lock
+
+    - name: Setup Nix development environment
+      uses: nicknovitski/nix-develop@v1
+      with:
+        arguments: ./${{ inputs.directory }}/bsf/.#devShell
+    
+    - name: Run tests
+      shell: bash
+      run: grype ${{ inputs.image_name }}:${{ inputs.tag }}
