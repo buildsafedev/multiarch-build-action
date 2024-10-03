@@ -25,6 +25,14 @@ inputs:
   runtime_image:
     description: 'Runtime image for the Docker image'
     required: true
+  docker_buildx_no_cache:
+    description: 'Whether to use the Docker buildx no cache option'
+    required: false
+    default: 'false'
+  build_hermetic_image:
+    description: 'Whether to build the hermetic Docker image'
+    required: false
+    default: 'false'
 
 runs:
   using: 'composite'
@@ -58,22 +66,62 @@ runs:
       run: |        
         docker buildx create --name mybuilder --use --driver docker-container
         echo "SOURCE_DATE_EPOCH: $SOURCE_DATE_EPOCH"
-        
-        # Build the main image
-        docker buildx build \
-          --no-cache \
-          --tag ${{ inputs.image_name }}:${{ inputs.tag }} \
-          --build-arg SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH \
-          --network=none \
-          --attest type=provenance,mode=max \
-          --platform=${{ inputs.platform }} \
-          --output type=oci,dest=${{ inputs.tag }} \
-          .
-        echo "Build completed successfully"
 
-        mkdir -p ${{ inputs.tag }}-extracted
-        tar -xvf ${{ inputs.tag }} -C ${{ inputs.tag }}-extracted
-        ls -l ${{ inputs.tag }}-extracted
+        if [ "${{ inputs.docker_buildx_no_cache }}" == "true" ] && [ "${{ inputs.build_hermetic_image }}" == "true" ]; then
+          # Build the main image
+          docker buildx build \
+            --no-cache \
+            --tag ${{ inputs.image_name }}:${{ inputs.tag }} \
+            --build-arg SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH \
+            --network=none \
+            --attest type=provenance,mode=min \
+            --platform=${{ inputs.platform }} \
+            --push \
+            --output type=oci \
+            .
+          echo "Build completed successfully"
+        fi
+
+        if [ "${{ inputs.build_hermetic_image }}" == "true" ]; then
+          # Build the main image
+          docker buildx build \
+            --tag ${{ inputs.image_name }}:${{ inputs.tag }} \
+            --build-arg SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH \
+            --network=none \
+            --attest type=provenance,mode=min \
+            --platform=${{ inputs.platform }} \
+            --push \
+            --output type=oci \
+            .
+          echo "Build completed successfully"
+        fi
+
+        if [ "${{ inputs.docker_buildx_no_cache }}" == "true" ]; then
+          docker buildx build \
+            --no-cache \
+            --tag ${{ inputs.image_name }}:${{ inputs.tag }} \
+            --build-arg SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH \
+            --attest type=provenance,mode=min \
+            --platform=${{ inputs.platform }} \
+            --push \
+            --output type=oci \
+            .
+          echo "Build completed successfully"
+        fi
+        
+        
+        if [ "${{ inputs.docker_buildx_no_cache }}" == "false" ] && [ "${{ inputs.build_hermetic_image }}" == "false" ]; then
+          # Build the main image
+          docker buildx build \
+            --tag ${{ inputs.image_name }}:${{ inputs.tag }} \
+            --build-arg SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH \
+            --attest type=provenance,mode=min \
+            --platform=${{ inputs.platform }} \
+            --push \
+            --output type=oci \
+            .
+          echo "Build completed successfully"
+        fi
       
     - name: Install Nix
       uses: DeterminateSystems/nix-installer-action@main
@@ -88,13 +136,18 @@ runs:
       uses: nicknovitski/nix-develop@v1
       with:
         arguments: ./${{ inputs.directory }}/bsf/.#devShell
-    
-    - name : skopeo copy image
-      working-directory: ${{ inputs.directory }}
+
+    - name: Is hermetic build
       shell: bash
       run: |
-          skopeo copy oci:${{ inputs.tag }}-extracted  docker-daemon:${{ inputs.image_name}}:${{ inputs.tag }}
-          docker images
-    - name: Run tests
+        docker buildx imagetools inspect ${{ inputs.image_name }}:${{ inputs.tag }} --format "{{ json .Provenance.SLSA }}" > slsa.json
+        cat slsa.json
+        if [ "$(jq -r '.build.builder' slsa.json)" == "hermetic" ]; then
+          echo "Hermetic build"
+        else
+          echo "Not hermetic build"
+        fi
+    
+    - name: Check for vulnerabilities
       shell: bash
       run: grype ${{ inputs.image_name }}:${{ inputs.tag }}
