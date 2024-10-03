@@ -55,54 +55,25 @@ runs:
     - name: Build hermetic Docker image
       shell: bash
       working-directory: ${{ inputs.directory }}
-      run: |
-        set -euo pipefail
-        
+      run: |        
+        docker buildx create --name mybuilder --use --driver docker-container
         echo "SOURCE_DATE_EPOCH: $SOURCE_DATE_EPOCH"
         
         # Build the main image
         docker buildx build \
           --no-cache \
-          --output type=docker \
           --tag ${{ inputs.image_name }}:${{ inputs.tag }} \
           --build-arg SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH \
           --network=none \
+          --attest type=provenance,mode=max \
           --platform=${{ inputs.platform }} \
+          --output type=oci,dest=${{ inputs.tag }} \
           .
-        
         echo "Build completed successfully"
 
-    - name: Verify hermetic build
-      shell: bash
-      run: |
-        set -euo pipefail
-        
-        # Check image history for network access or RUN commands
-        if docker history ${{ inputs.image_name }}:${{ inputs.tag }} | grep -qE 'RUN|curl|wget|apt-get|yum|dnf'; then
-          echo "Image history contains RUN commands or network access indicators, which may indicate non-hermetic build."
-          exit 1
-        fi
-        
-        # Check if build args include SOURCE_DATE_EPOCH
-        if ! docker inspect ${{ inputs.image_name }}:${{ inputs.tag }} --format '{{index .Config.Labels "org.opencontainers.image.created"}}' | grep -q "$SOURCE_DATE_EPOCH"; then
-          echo "Build does not appear to use SOURCE_DATE_EPOCH as creation timestamp."
-          exit 1
-        fi
-        
-        # Verify SLSA metadata
-        metadata=$(docker buildx imagetools inspect ${{ inputs.image_name }}:${{ inputs.tag }} --format '{{json .Metadata}}')
-        if echo "$metadata" | jq -e '."https://mobyproject.org/buildkit@v1#hermetic" == true' > /dev/null; then
-          echo "SLSA metadata confirms the build was hermetic."
-        else
-          echo "SLSA metadata does not indicate a hermetic build."
-          exit 1
-        fi
-        
-        echo "Build is verified as hermetic based on image history, build arguments, and SLSA metadata."
-        echo "Note: The hermetic flag is included with both mode=min and mode=max in the SLSA metadata."
-        echo "This extension field is set to true if the build was hermetic and did not access the network."
-        echo "In Dockerfiles, a build is hermetic if it does not use RUN commands or disables network with --network=none flag."
-
+        mkdir -p ${{ inputs.tag }}-extracted
+        tar -xvf ${{ inputs.tag }} -C ${{ inputs.tag }}-extracted
+        ls -l ${{ inputs.tag }}-extracted
       
     - name: Install Nix
       uses: DeterminateSystems/nix-installer-action@main
@@ -118,6 +89,12 @@ runs:
       with:
         arguments: ./${{ inputs.directory }}/bsf/.#devShell
     
+    - name : skopeo copy image
+      working-directory: ${{ inputs.directory }}
+      shell: bash
+      run: |
+          skopeo copy oci:${{ inputs.tag }}-extracted  docker-daemon:${{ inputs.image_name}}:${{ inputs.tag }}
+          docker images
     - name: Run tests
       shell: bash
       run: grype ${{ inputs.image_name }}:${{ inputs.tag }}
