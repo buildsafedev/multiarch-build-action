@@ -33,6 +33,15 @@ inputs:
     description: 'Whether to build the hermetic Docker image'
     required: false
     default: 'false'
+  cosign_password:
+    description: 'Cosign password'
+    required: false
+  cosign_private_key:
+    description: 'Cosign key'
+    required: false
+  cosign_public_key:
+    description: 'Cosign public key'
+    required: false
 
 runs:
   using: 'composite'
@@ -151,3 +160,20 @@ runs:
     - name: Check for vulnerabilities
       shell: bash
       run: grype ${{ inputs.image_name }}:${{ inputs.tag }}
+
+
+    - name: Sign and push image
+      shell: bash
+      run: |
+        if [ "${{ inputs.cosign_password }}" != "" ] && [ "${{ inputs.cosign_private_key }}" != "" ] && [ "${{ inputs.cosign_public_key }}" != "" ]; then
+          export COSIGN_PASSWORD="${{ inputs.cosign_password }}"
+          echo "${{ inputs.cosign_private_key }}" > cosign.key
+          echo "${{ inputs.cosign_public_key }}" > cosign.pub
+          cosign sign --yes --key cosign.key ${{ inputs.image_name }}:${{ inputs.tag }}
+          cosign verify --key cosign.pub ${{ inputs.image_name }}:${{ inputs.tag }}
+          cosign triangulate ${{ inputs.image_name }}:${{ inputs.tag }}
+        else
+          echo "Skipping signing and pushing image Make sure to provide cosign_password, cosign_private_key, and cosign_public_key"
+        fi
+
+    
