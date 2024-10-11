@@ -70,3 +70,8 @@ runs:
         path: /tmp/digests/*
         if-no-files-found: error
         retention-days: 1
+  
+    - name : Post Checkout Digests
+      shell: bash
+      run: |
+        sudo rm -rf /tmp/digests
