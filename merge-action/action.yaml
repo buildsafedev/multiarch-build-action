@@ -17,6 +17,10 @@ inputs:
   tag:
     description: 'Tag of the Docker image'
     required: true
+  registry:
+    description: 'The registry to push the image to.'
+    required: false
+    default: 'docker.io'
 
 runs:
   using: 'composite'
@@ -46,6 +50,7 @@ runs:
     - name: Login to DockerHub
       uses: docker/login-action@v3
       with:
+        registry: ${{ inputs.registry }}
         username: ${{ inputs.oci_registry_username }}
         password: ${{ inputs.oci_registry_password }}
 
